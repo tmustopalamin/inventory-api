@@ -1,7 +1,8 @@
 use actix_web::{get, web, Responder, Result};
 
-use crate::{establish_connection, models::item::Item};
 use diesel::prelude::*;
+
+use crate::{models::item::Item, utils::db::establish_connection};
 
 #[get("/api/items")]
 async fn get_items() -> Result<impl Responder>  {
