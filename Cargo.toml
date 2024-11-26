@@ -12,3 +12,4 @@ chrono = { version = "0.4", features = ["serde"] }
 derive_more = { version = "1", features = ["full"] }
 r2d2 = "0.8"
 
+# run: cargo watch -x run

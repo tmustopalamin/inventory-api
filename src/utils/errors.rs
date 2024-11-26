@@ -7,6 +7,7 @@ use crate::models::response_data::ResponseDataError;
 pub enum MyError {
     InternalError,    
     Timeout,
+    DbConnectionError,
 
     #[display("not found")]
     NotFound { field: String, value: String },
@@ -34,6 +35,10 @@ impl error::ResponseError for MyError {
                 code: "404".to_string(),
                 message: format!("field={} dan value={} tidak ditemukan", field, value),
             },
+            MyError::DbConnectionError => ResponseDataError {
+                code: "500".to_string(),
+                message: "terjadi kesalahan internal".to_string(),
+            },
         };
 
         HttpResponse::build(self.status_code())
@@ -43,6 +48,7 @@ impl error::ResponseError for MyError {
 
     fn status_code(&self) -> StatusCode {
         match self {
+            MyError::DbConnectionError => StatusCode::INTERNAL_SERVER_ERROR,
             MyError::InternalError => StatusCode::INTERNAL_SERVER_ERROR,
             MyError::BadClientData{ .. } => StatusCode::BAD_REQUEST,
             MyError::Timeout => StatusCode::GATEWAY_TIMEOUT,

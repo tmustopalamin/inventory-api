@@ -1,4 +1,4 @@
-use actix_web::{delete, get, post, put, web, HttpResponse, Responder, Result};
+use actix_web::{delete, get, post, put, web, HttpResponse, Result};
 
 use diesel::prelude::*;
 
@@ -6,7 +6,7 @@ use crate::{models::{item::{Item, ItemDto}, response_data::{ResponseDataError, R
 
 #[get("/api/items")]
 async fn get_items(db_pool: web::Data<DbPool>) -> Result<HttpResponse, MyError>  {
-    let mut conn = db_pool.get().expect("Couldn't get DB connection from pool");
+    let mut conn = db_pool.get().map_err(|_| MyError::DbConnectionError)?;
 
     use crate::schema::items::dsl::*;
     let results = match items
@@ -89,7 +89,7 @@ async fn insert_item(db_pool: web::Data<DbPool>, body_data: web::Json<ItemDto>) 
         name: body_data.name.clone()
     };
     
-    let _res =  match diesel::insert_into(items::table)
+    let _ =  match diesel::insert_into(items::table)
         .values(&new_item)
         .execute(&mut conn) {
             Ok(data) => data,
@@ -152,7 +152,7 @@ async fn delete_item(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result
     
     let id_item = path.into_inner();
 
-    let _res = match diesel::delete(items.filter(id.eq(id_item)))
+    let _ = match diesel::delete(items.filter(id.eq(id_item)))
         .execute(&mut conn) {
             Ok(data) => data,
             Err(err) => {
