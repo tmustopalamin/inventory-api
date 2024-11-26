@@ -28,6 +28,7 @@ async fn main() -> std::io::Result<()> {
             .service(routes::item_route::get_item)
             .service(routes::item_route::insert_item)
             .service(routes::item_route::update_item)
+            .service(routes::item_route::delete_item)
     }).bind(("127.0.0.1", 3030))?
     .run()
     .await
