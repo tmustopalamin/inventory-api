@@ -2,39 +2,42 @@ use actix_web::{get, post, put, web, HttpResponse, Responder, Result};
 
 use diesel::prelude::*;
 
-use crate::{models::{item::{Item, ItemDto}, response_data::{ResponseDataError, ResponseDataSuccess}}, schema::items, utils::db::establish_connection, MyError};
+use crate::{models::{item::{Item, ItemDto}, response_data::{ResponseDataError, ResponseDataSuccess}}, schema::items, utils::{db::DbPool, errors::MyError}};
 
 #[get("/api/items")]
-async fn get_items() -> Result<HttpResponse>  {
+async fn get_items(db_pool: web::Data<DbPool>) -> Result<HttpResponse>  {
+    let mut conn = db_pool.get().expect("Couldn't get DB connection from pool");
     
     use crate::schema::items::dsl::*;
-
-    let connection = &mut establish_connection();
     let results = items
         .select(Item::as_select())
-        .load(connection)
+        .load(&mut conn)
         .expect("Error loading posts");
-
 
     Ok(HttpResponse::Ok().json(results))
 }
 
 #[get("/api/items/{id}")]
-async fn get_item(path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
+async fn get_item(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
+    let mut conn = db_pool.get().expect("Couldn't get DB connection from pool");
+
     let id_item = path.into_inner();
 
     use crate::schema::items::dsl::*;
 
-    let connection = &mut establish_connection();
     let results = match items
         .filter(id.eq(id_item)) 
         .select(Item::as_select()) 
-        .first(connection) {
+        .first(&mut conn) {
             Ok(data) => data,
             Err(err) => {
                 match err {
                     diesel::result::Error::NotFound => {
-                        return Err(MyError::NotFound { field: "id".to_string(), value: id_item.to_string() } );
+                        let notfound_res = ResponseDataSuccess::<String> { 
+                            message: "tidak ada data di database".to_string(), 
+                            data: None
+                        };
+                        return Ok(HttpResponse::Ok().json(notfound_res))
                     }
                     _ => {
                         return Err(MyError::InternalError );
@@ -42,12 +45,17 @@ async fn get_item(path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
                 }
             },
         };
-        
+
+    ResponseDataSuccess::<String> { 
+        message: "tidak ada data di database".to_string(), 
+        data: None
+    };
     Ok(HttpResponse::Ok().json(results))
 }
 
 #[post("/api/items")]
-async fn insert_item(body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
+async fn insert_item(db_pool: web::Data<DbPool>, body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
+    let mut conn: r2d2::PooledConnection<diesel::r2d2::ConnectionManager<SqliteConnection>> = db_pool.get().expect("Couldn't get DB connection from pool");
 
     let name = body_data.name.clone().unwrap_or("".to_string());
     if name.is_empty() {
@@ -61,11 +69,10 @@ async fn insert_item(body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
     let new_item = ItemDto {
         name: body_data.name.clone()
     };
-
-    let connection = &mut establish_connection();
+    
     diesel::insert_into(items::table)
         .values(&new_item)
-        .execute(connection)
+        .execute(&mut conn)
         .expect("Error saving new post");
 
     return Ok(HttpResponse::Ok().json(ResponseDataSuccess::<usize> {
@@ -75,7 +82,9 @@ async fn insert_item(body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
 }
 
 #[put("/api/items/{id}")]
-async fn update_item(path: web::Path<i32>, body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
+async fn update_item(db_pool: web::Data<DbPool>, path: web::Path<i32>, body_data: web::Json<ItemDto>) -> Result<impl Responder>  {
+    let mut conn: r2d2::PooledConnection<diesel::r2d2::ConnectionManager<SqliteConnection>> = db_pool.get().expect("Couldn't get DB connection from pool");
+
     use crate::schema::items::dsl::*;
     
     let id_item = path.into_inner();
@@ -89,10 +98,9 @@ async fn update_item(path: web::Path<i32>, body_data: web::Json<ItemDto>) -> Res
         return Ok(HttpResponse::BadRequest().json(err));
     }
 
-    let connection = &mut establish_connection();
     diesel::update(items.find(id_item))
         .set(name.eq(updated_name))
-        .execute(connection)
+        .execute(&mut conn)
         .expect("Error saving new post");
 
     return Ok(HttpResponse::Ok().json(ResponseDataSuccess::<usize> {
