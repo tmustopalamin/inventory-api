@@ -10,10 +10,10 @@ pub enum MyError {
     DbConnectionError,
 
     #[display("not found")]
-    NotFound { field: String, value: String },
+    NotFound { msg: String },
 
     #[display("bad client data")]
-    BadClientData { field: String, value: String },
+    BadClientData { msg: String },
 }
 
 impl error::ResponseError for MyError {
@@ -23,17 +23,17 @@ impl error::ResponseError for MyError {
                 code: "500".to_string(),
                 message: "terjadi kesalahan internal".to_string(),
             },
-            MyError::BadClientData { field, value } => ResponseDataError {
+            MyError::BadClientData { msg } => ResponseDataError {
                 code: "400".to_string(),
-                message: format!("field={} dan value={}", field, value),
+                message: format!("{}", msg),
             },
             MyError::Timeout => ResponseDataError {
                 code: "504".to_string(),
                 message: "waktu habis".to_string(),
             },
-            MyError::NotFound { field, value } => ResponseDataError {
+            MyError::NotFound { msg } => ResponseDataError {
                 code: "404".to_string(),
-                message: format!("field={} dan value={} tidak ditemukan", field, value),
+                message: format!("{}", msg),
             },
             MyError::DbConnectionError => ResponseDataError {
                 code: "500".to_string(),

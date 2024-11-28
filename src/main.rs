@@ -6,6 +6,8 @@ use utils::db::establish_connection_pool;
 pub mod schema;
 pub mod models;
 pub mod routes;
+pub mod repositories;
+pub mod services;
 pub mod utils;
 
 #[get("/api/health_check")]
@@ -24,11 +26,11 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(web::Data::new(db_pool.clone()))
             .service(hello)
-            .service(routes::item_route::get_items)
-            .service(routes::item_route::get_item)
-            .service(routes::item_route::insert_item)
-            .service(routes::item_route::update_item)
-            .service(routes::item_route::delete_item)
+            .service(routes::item_route::get_all_item_route)
+            .service(routes::item_route::get_item_route)
+            .service(routes::item_route::insert_item_route)
+            .service(routes::item_route::update_item_route)
+            .service(routes::item_route::delete_item_route)
     }).bind(("127.0.0.1", 3030))?
     .run()
     .await

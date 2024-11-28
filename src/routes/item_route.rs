@@ -2,105 +2,41 @@ use actix_web::{delete, get, post, put, web, HttpResponse, Result};
 
 use diesel::prelude::*;
 
-use crate::{models::{item::{Item, ItemDto}, response_data::{ResponseDataError, ResponseDataSuccess}}, schema::items, utils::{db::DbPool, errors::MyError}};
+use crate::{models::{item::{Item, ItemDto}, response_data::ResponseDataSuccess}, utils::{db::DbPool, errors::MyError}};
 
 #[get("/api/items")]
-async fn get_items(db_pool: web::Data<DbPool>) -> Result<HttpResponse, MyError>  {
-    let mut conn = db_pool.get().map_err(|_| MyError::DbConnectionError)?;
+async fn get_all_item_route(db_pool: web::Data<DbPool>) -> Result<HttpResponse, MyError>  {
 
-    use crate::schema::items::dsl::*;
-    let results = match items
-        .select(Item::as_select())
-        .load(&mut conn) {
-            Ok(data) => data,
-            Err(err) => {
-                match err {
-                    diesel::result::Error::NotFound => {
-                        let notfound_res = ResponseDataSuccess::<String> { 
-                            message: "tidak ada data di database".to_string(), 
-                            data: None
-                        };
-                        return Ok(HttpResponse::Ok().json(notfound_res))
-                    }
-                    _ => {
-                        return Err(MyError::InternalError );
-                    }
-                }
-            },
-        };
+    use crate::services::item_service::ItemService;
+    let list_items = ItemService::get_all_items(db_pool).await?;
 
     let res = ResponseDataSuccess::<Vec<Item>> { 
-        message: "get list items berhasil".to_string(), 
-        data: Some(results)
+        message: "".to_string(), 
+        data: Some(list_items)
     };
     Ok(HttpResponse::Ok().json(res))
 }
 
 #[get("/api/items/{id}")]
-async fn get_item(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
-    let mut conn = db_pool.get().expect("Couldn't get DB connection from pool");
-
+async fn get_item_route(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
     let id_item = path.into_inner();
 
-    use crate::schema::items::dsl::*;
-
-    let results = match items
-        .filter(id.eq(id_item)) 
-        .select(Item::as_select()) 
-        .first(&mut conn) {
-            Ok(data) => data,
-            Err(err) => {
-                match err {
-                    diesel::result::Error::NotFound => {
-                        let notfound_res = ResponseDataSuccess::<String> { 
-                            message: "tidak ada data di database".to_string(), 
-                            data: None
-                        };
-                        return Ok(HttpResponse::Ok().json(notfound_res))
-                    }
-                    _ => {
-                        return Err(MyError::InternalError );
-                    }
-                }
-            },
-        };
-
-    ResponseDataSuccess::<String> { 
-        message: "tidak ada data di database".to_string(), 
-        data: None
+    use crate::services::item_service::ItemService;
+    let item = ItemService::get_item(db_pool, id_item).await?;
+    
+    let res = ResponseDataSuccess::<Item> { 
+        message: "".to_string(), 
+        data: Some(item)
     };
-    Ok(HttpResponse::Ok().json(results))
+    Ok(HttpResponse::Ok().json(res))
 }
 
 #[post("/api/items")]
-async fn insert_item(db_pool: web::Data<DbPool>, body_data: web::Json<ItemDto>) -> Result<HttpResponse, MyError>  {
-    let mut conn: r2d2::PooledConnection<diesel::r2d2::ConnectionManager<SqliteConnection>> = db_pool.get().expect("Couldn't get DB connection from pool");
+async fn insert_item_route(db_pool: web::Data<DbPool>, body_data: web::Json<ItemDto>) -> Result<HttpResponse, MyError>  {
+    let item_dto = body_data.0;
 
-    let name = body_data.name.clone().unwrap_or("".to_string());
-    if name.is_empty() {
-        let err = ResponseDataError {
-            code: "empty_field".to_string(),
-            message: "kolom nama perlu di isi".to_string()
-        };
-        return Ok(HttpResponse::BadRequest().json(err));
-    }
-
-    let new_item = ItemDto {
-        name: body_data.name.clone()
-    };
-    
-    let _ =  match diesel::insert_into(items::table)
-        .values(&new_item)
-        .execute(&mut conn) {
-            Ok(data) => data,
-            Err(err) => {
-                match err {
-                    _ => {
-                        return Err(MyError::InternalError );
-                    }
-                }
-            },
-        };
+    use crate::services::item_service::ItemService;
+    let _ = ItemService::insert_item(db_pool, item_dto).await?;
 
     return Ok(HttpResponse::Ok().json(ResponseDataSuccess::<usize> {
         message: "insert success".to_string(),
@@ -109,60 +45,51 @@ async fn insert_item(db_pool: web::Data<DbPool>, body_data: web::Json<ItemDto>) 
 }
 
 #[put("/api/items/{id}")]
-async fn update_item(db_pool: web::Data<DbPool>, path: web::Path<i32>, body_data: web::Json<ItemDto>) -> Result<HttpResponse, MyError>  {
-    let mut conn: r2d2::PooledConnection<diesel::r2d2::ConnectionManager<SqliteConnection>> = db_pool.get().expect("Couldn't get DB connection from pool");
-
-    use crate::schema::items::dsl::*;
-    
+async fn update_item_route(db_pool: web::Data<DbPool>, path: web::Path<i32>, body_data: web::Json<ItemDto>) -> Result<HttpResponse, MyError>  {
     let id_item = path.into_inner();
+    let item_dto = body_data.0;
 
-    let updated_name = body_data.name.clone().unwrap_or("".to_string());
-    if updated_name.is_empty() {
-        let err = ResponseDataError {
-            code: "empty_field".to_string(),
-            message: "kolom nama perlu di isi".to_string()
-        };
-        return Ok(HttpResponse::BadRequest().json(err));
-    }
-
-    let _ = match diesel::update(items.find(id_item))
-        .set(name.eq(updated_name))
-        .execute(&mut conn) {
-            Ok(data) => data,
-            Err(err) => {
-                match err {
-                    _ => {
-                        return Err(MyError::InternalError);
-                    }
-                }
-            },
-        };
+    use crate::services::item_service::ItemService;
+    let _ = ItemService::update_item(db_pool, id_item, item_dto).await?;
 
     return Ok(HttpResponse::Ok().json(ResponseDataSuccess::<usize> {
         message: "update success".to_string(),
-        data: None
+        data: None //0 / 1 adalah number affected
     }));
 }
 
 #[delete("/api/items/{id}")]
-async fn delete_item(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
-    let mut conn: r2d2::PooledConnection<diesel::r2d2::ConnectionManager<SqliteConnection>> = db_pool.get().expect("Couldn't get DB connection from pool");
-
-    use crate::schema::items::dsl::*;
-    
+async fn delete_item_route(db_pool: web::Data<DbPool>, path: web::Path<i32>) -> Result<HttpResponse, MyError>  {
     let id_item = path.into_inner();
+    
+    use crate::schema::items::dsl::*;
 
-    let _ = match diesel::delete(items.filter(id.eq(id_item)))
-        .execute(&mut conn) {
-            Ok(data) => data,
-            Err(err) => {
-                match err {
-                    _ => {
-                        return Err(MyError::InternalError );
-                    }
+    let results_async = web::block(move ||  {
+        let mut conn = db_pool.get().expect("error getting db connection");
+
+        diesel::delete(items.filter(id.eq(id_item))).execute(&mut conn)
+    }).await;
+
+    let _results = match results_async {
+        Ok(Ok(res)) => res,
+        Ok(Err(err)) => {
+            match err {
+                diesel::result::Error::NotFound => {
+                    let notfound_res = ResponseDataSuccess::<String> { 
+                        message: "tidak ada data di database".to_string(), 
+                        data: None
+                    };
+                    return Ok(HttpResponse::Ok().json(notfound_res))
+                },
+                _ => {
+                    return Err(MyError::InternalError);
                 }
             }
-        };
+        },
+        _ => {
+            return Err(MyError::InternalError);
+        }
+    };
 
     return Ok(HttpResponse::Ok().json(ResponseDataSuccess::<usize> {
         message: "delete success".to_string(),
